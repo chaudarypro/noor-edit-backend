@@ -6,10 +6,18 @@ const fetch = require('node-fetch');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
-const { createCanvas } = require('canvas');
+const { createCanvas, registerFont } = require('canvas');
 
 ffmpeg.setFfmpegPath(ffmpegPath);
 ffmpeg.setFfprobePath(ffprobePath);
+
+// Enregistrer la police UthmanicHafs
+try {
+  registerFont('/app/UthmanicHafs_V22.ttf', { family: 'UthmanicHafs' });
+  console.log('✅ Police UthmanicHafs chargée');
+} catch (e) {
+  console.log('⚠️ Police UthmanicHafs non trouvée, fallback serif');
+}
 
 // Dimensions selon le format
 function getDimensions(format) {
@@ -97,7 +105,7 @@ function generateFrame(settings, verseText, sourceText, dimensions) {
   // ── Texte arabe ──────────────────────────────────────────────────────────────
   if (settings.arabic?.show && verseText) {
     const fontSize = (settings.arabic.size || 22) * (width / 400);
-    ctx.font = `${fontSize}px serif`;
+    ctx.font = `${fontSize}px UthmanicHafs, serif`;
     ctx.fillStyle = settings.arabic.color || '#ffffff';
     ctx.textAlign = 'center';
     ctx.direction = 'rtl';
@@ -134,7 +142,6 @@ function generateFrame(settings, verseText, sourceText, dimensions) {
       ctx.fillStyle = '#89938d';
       ctx.textAlign = 'center';
       ctx.direction = 'ltr';
-      ctx.letterSpacing = '2px';
 
       const sourceLines = sourceText.split('\n');
       let sourceY = settings.sourcePosition === 'top'
