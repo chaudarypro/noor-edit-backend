@@ -1,0 +1,22 @@
+{
+  "name": "noor-edit-backend",
+  "version": "1.0.0",
+  "description": "Noor Edit video generation worker",
+  "main": "worker/index.js",
+  "scripts": {
+    "start": "node worker/index.js",
+    "dev": "node worker/index.js"
+  },
+  "dependencies": {
+    "@ffmpeg-installer/ffmpeg": "^1.1.0",
+    "@ffprobe-installer/ffprobe": "^2.1.2",
+    "axios": "^1.6.0",
+    "canvas": "^3.2.1",
+    "cloudinary": "^2.0.0",
+    "cors": "^2.8.5",
+    "dotenv": "^17.3.1",
+    "express": "^4.18.0",
+    "fluent-ffmpeg": "^2.1.3",
+    "node-fetch": "^2.7.0"
+  }
+}
