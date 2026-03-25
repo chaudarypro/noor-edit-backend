@@ -255,7 +255,8 @@ async function generateVideo(settings, surahName, verses, tmpDir) {
           .input(framePath)
           .complexFilter([
             `[0:v]scale=${dimensions.width}:${dimensions.height},setsar=1[bg]`,
-            `[bg]colorchannelmixer=rr=1:gg=1:bb=1:aa=${settings.bgOverlayOpacity || 0.5}[darkbg]`,
+            `color=black@${settings.bgOverlayOpacity || 0.5}:${dimensions.width}x${dimensions.height},format=rgba[blackoverlay]`,
+            `[bg][blackoverlay]overlay=0:0[darkbg]`,
             `[1:v]scale=${dimensions.width}:${dimensions.height},format=rgba[text]`,
             `[darkbg][text]overlay=0:0[outv]`,
           ])
