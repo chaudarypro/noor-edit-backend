@@ -87,7 +87,10 @@ function generateFrame(settings, verseText, sourceText, dimensions) {
   const ctx = canvas.getContext('2d');
 
   // ── Fond ────────────────────────────────────────────────────────────────────
-  if (settings.bgType === 'gradient') {
+  if (settings.bgType === 'video') {
+    // Fond transparent — la vidéo sera utilisée comme fond dans FFmpeg
+    ctx.clearRect(0, 0, width, height);
+  } else if (settings.bgType === 'gradient') {
     const angle = ((settings.gradientAngle || 135) - 90) * Math.PI / 180;
     const x1 = width / 2 - Math.cos(angle) * width / 2;
     const y1 = height / 2 - Math.sin(angle) * height / 2;
@@ -99,8 +102,8 @@ function generateFrame(settings, verseText, sourceText, dimensions) {
     ctx.fillStyle = grad;
   } else {
     ctx.fillStyle = settings.bgColor || '#001710';
+    ctx.fillRect(0, 0, width, height);
   }
-  ctx.fillRect(0, 0, width, height);
 
   // ── Texte arabe ──────────────────────────────────────────────────────────────
   if (settings.arabic?.show && verseText) {
@@ -177,6 +180,16 @@ function getAudioDuration(audioPath) {
   });
 }
 
+// Télécharge la vidéo de fond Pexels
+async function downloadBgVideo(url, destPath) {
+  console.log(`  → Téléchargement vidéo de fond: ${url}`);
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Vidéo de fond non trouvée: ${url}`);
+  const buffer = await res.buffer();
+  fs.writeFileSync(destPath, buffer);
+  console.log(`  ✓ Vidéo de fond téléchargée`);
+}
+
 // Génère la vidéo complète
 async function generateVideo(settings, surahName, verses, tmpDir) {
   const dimensions = getDimensions(settings.format);
@@ -218,27 +231,66 @@ async function generateVideo(settings, surahName, verses, tmpDir) {
     framePaths.push({ framePath, duration, verseId });
   }
 
+  // 3.5 Télécharger la vidéo de fond si nécessaire
+  let bgVideoPath = null;
+  if (settings.bgType === 'video' && settings.bgVideoUri) {
+    bgVideoPath = path.join(tmpDir, 'bg_video.mp4');
+    await downloadBgVideo(settings.bgVideoUri, bgVideoPath);
+  }
+
   // 4. Créer un clip vidéo par verset
   console.log('🎬 Création des clips vidéo...');
   const clipPaths = [];
+  let bgVideoOffset = 0; // Pour enchaîner les segments de la vidéo de fond
 
   for (const { framePath, duration, verseId } of framePaths) {
     const clipPath = path.join(tmpDir, `clip_${verseId}.mp4`);
-    await new Promise((resolve, reject) => {
-      ffmpeg()
-        .input(framePath)
-        .inputOptions(['-loop', '1', '-t', String(duration)])
-        .videoCodec('libx264')
-        .outputOptions([
-          '-pix_fmt', 'yuv420p',
-          '-vf', `scale=${dimensions.width}:${dimensions.height}`,
-          '-r', '30',
-        ])
-        .output(clipPath)
-        .on('end', () => { console.log(`  ✓ Clip verset ${verseId} créé`); resolve(); })
-        .on('error', reject)
-        .run();
-    });
+
+    if (bgVideoPath) {
+      // Fond vidéo : overlay du texte sur la vidéo Pexels
+      await new Promise((resolve, reject) => {
+        ffmpeg()
+          .input(bgVideoPath)
+          .inputOptions(['-ss', String(bgVideoOffset), '-t', String(duration)])
+          .input(framePath)
+          .complexFilter([
+            `[0:v]scale=${dimensions.width}:${dimensions.height},setsar=1[bg]`,
+            `[bg]colorchannelmixer=rr=1:gg=1:bb=1:aa=${settings.bgOverlayOpacity || 0.5}[darkbg]`,
+            `[1:v]scale=${dimensions.width}:${dimensions.height},format=rgba[text]`,
+            `[darkbg][text]overlay=0:0[outv]`,
+          ])
+          .outputOptions([
+            '-map', '[outv]',
+            '-pix_fmt', 'yuv420p',
+            '-r', '30',
+            '-t', String(duration),
+          ])
+          .videoCodec('libx264')
+          .output(clipPath)
+          .on('end', () => { console.log(`  ✓ Clip verset ${verseId} créé (fond vidéo)`); resolve(); })
+          .on('error', reject)
+          .run();
+      });
+      bgVideoOffset += duration;
+    } else {
+      // Fond image/couleur classique
+      await new Promise((resolve, reject) => {
+        ffmpeg()
+          .input(framePath)
+          .inputOptions(['-loop', '1', '-t', String(duration)])
+          .videoCodec('libx264')
+          .outputOptions([
+            '-pix_fmt', 'yuv420p',
+            '-vf', `scale=${dimensions.width}:${dimensions.height}`,
+            '-r', '30',
+          ])
+          .output(clipPath)
+          .on('end', () => { console.log(`  ✓ Clip verset ${verseId} créé`); resolve(); })
+          .on('error', reject)
+          .run();
+      });
+    }
+
     clipPaths.push(clipPath);
   }
 
