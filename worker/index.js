@@ -24,6 +24,7 @@ app.post('/generate', async (req, res) => {
 
   console.log(`\n🎬 Nouveau job: ${jobId}`);
   console.log(`📖 ${surahName} — Versets ${verses.join(', ')}`);
+  console.log(`🎨 bgType: ${settings.bgType}, bgVideoUri: ${settings.bgVideoUri}`);
 
   // Dossier temporaire pour ce job
   const tmpDir = path.join(os.tmpdir(), `noor-edit-${jobId}`);
