@@ -164,7 +164,7 @@ async function generateFrame(settings, verseText, sourceText, dimensions, logoIm
     ctx.globalAlpha = 0.25;
     if (settings.format === '16:9') {
       // Haut gauche avec marge
-      const marginX = Math.round(width * 0.04);
+      const marginX = Math.round(width * 0.07);
       const marginY = Math.round(height * 0.08);
       ctx.drawImage(logoImage, marginX, marginY, logoSize, logoSize);
     } else {
