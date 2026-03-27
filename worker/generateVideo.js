@@ -90,6 +90,10 @@ async function generateFrame(settings, verseText, sourceText, dimensions, logoIm
   if (settings.bgType === 'video') {
     // Fond transparent — la vidéo sera utilisée comme fond dans FFmpeg
     ctx.clearRect(0, 0, width, height);
+  } else if (settings.bgType === 'image' && settings.bgImageBase64) {
+    const buf = Buffer.from(settings.bgImageBase64, 'base64');
+    const bgImg = await loadImage(buf);
+    ctx.drawImage(bgImg, 0, 0, width, height);
   } else if (settings.bgType === 'gradient') {
     const angle = ((settings.gradientAngle || 135) - 90) * Math.PI / 180;
     const x1 = width / 2 - Math.cos(angle) * width / 2;
