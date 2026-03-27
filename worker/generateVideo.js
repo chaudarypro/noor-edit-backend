@@ -160,13 +160,14 @@ async function generateFrame(settings, verseText, sourceText, dimensions, logoIm
 
   // ── Watermark ─────────────────────────────────────────────────────────────────
   const wmType = settings.watermarkType || 'default';
+  const wmOpacity = wmType === 'default' ? 0.25 : (settings.watermarkOpacity ?? 0.25);
   const isTop = settings.format === '16:9';
 
   if (wmType === 'text' && settings.watermarkText) {
     const fontSize = Math.round(width * 0.018);
     ctx.font = `700 ${fontSize}px sans-serif`;
     ctx.fillStyle = '#ffffff';
-    ctx.globalAlpha = 0.25;
+    ctx.globalAlpha = wmOpacity;
     if (isTop) {
       const marginX = Math.round(width * 0.07);
       const marginY = Math.round(height * 0.08);
@@ -191,7 +192,7 @@ async function generateFrame(settings, verseText, sourceText, dimensions, logoIm
     }
     if (wmImage) {
       const logoSize = Math.round(width * 0.15);
-      ctx.globalAlpha = 0.25;
+      ctx.globalAlpha = wmOpacity;
       if (isTop) {
         const marginX = Math.round(width * 0.07);
         const marginY = Math.round(height * 0.08);
