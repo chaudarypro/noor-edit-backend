@@ -80,15 +80,15 @@ function wrapText(ctx, text, maxWidth) {
   return lines;
 }
 
-// Génère une frame PNG pour un verset
-function generateFrame(settings, verseText, sourceText, dimensions) {
+// Génère une frame PNG — verseText peut être un chunk de mots, translationText est la traduction complète du verset
+function generateFrame(settings, verseText, sourceText, dimensions, translationText) {
   const { width, height } = dimensions;
   const canvas = createCanvas(width, height);
   const ctx = canvas.getContext('2d');
+  const scale = width / (settings.previewW || 400);
 
   // ── Fond ────────────────────────────────────────────────────────────────────
   if (settings.bgType === 'video') {
-    // Fond transparent — la vidéo sera utilisée comme fond dans FFmpeg
     ctx.clearRect(0, 0, width, height);
   } else if (settings.bgType === 'gradient') {
     const angle = ((settings.gradientAngle || 135) - 90) * Math.PI / 180;
@@ -100,6 +100,7 @@ function generateFrame(settings, verseText, sourceText, dimensions) {
     grad.addColorStop(0, settings.gradientFrom || '#001710');
     grad.addColorStop(1, settings.gradientTo || '#053025');
     ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, width, height);
   } else {
     ctx.fillStyle = settings.bgColor || '#001710';
     ctx.fillRect(0, 0, width, height);
@@ -107,7 +108,7 @@ function generateFrame(settings, verseText, sourceText, dimensions) {
 
   // ── Texte arabe ──────────────────────────────────────────────────────────────
   if (settings.arabic?.show && verseText) {
-    const fontSize = (settings.arabic.size || 22) * (width / 400);
+    const fontSize = (settings.arabic.size || 22) * scale;
     ctx.font = `${fontSize}px UthmanicHafs, serif`;
     ctx.fillStyle = settings.arabic.color || '#ffffff';
     ctx.textAlign = 'center';
@@ -125,22 +126,22 @@ function generateFrame(settings, verseText, sourceText, dimensions) {
     }
 
     // ── Traduction ─────────────────────────────────────────────────────────────
-    if (settings.translation?.show && settings.translationTexts) {
-      const transFontSize = (settings.translation.size || 10) * (width / 400);
+    if (settings.translation?.show && translationText) {
+      const transFontSize = (settings.translation.size || 10) * scale;
       ctx.font = `${transFontSize}px sans-serif`;
       ctx.fillStyle = settings.translation.color || '#ffffff';
       ctx.textAlign = 'center';
       ctx.direction = 'ltr';
       ctx.globalAlpha = 0.85;
-      const transY = startY + (settings.textGap || 16) * (width / 400);
-      ctx.fillText(settings.translationTexts[0] || '', width / 2, transY);
+      const transY = startY + (settings.textGap || 16) * scale;
+      ctx.fillText(translationText, width / 2, transY);
       ctx.globalAlpha = 1;
       startY = transY + transFontSize * 1.6;
     }
 
     // ── Source du verset ───────────────────────────────────────────────────────
     if (settings.showSource && sourceText) {
-      const sourceFontSize = (settings.sourceSize || 5) * (width / 400) * 3;
+      const sourceFontSize = (settings.sourceSize || 5) * scale * 3;
       ctx.font = `${sourceFontSize}px sans-serif`;
       ctx.fillStyle = '#89938d';
       ctx.textAlign = 'center';
@@ -168,6 +169,74 @@ function generateFrame(settings, verseText, sourceText, dimensions) {
   ctx.globalAlpha = 1;
 
   return canvas.toBuffer('image/png');
+}
+
+// Découpe un verset en chunks de mots avec leurs timings
+function buildWordChunks(verseText, segments, audioDuration, chunkSize = 5) {
+  const words = verseText.split(' ').filter(Boolean);
+  const totalMs = audioDuration * 1000;
+  const chunks = [];
+
+  for (let i = 0; i < words.length; i += chunkSize) {
+    const chunkWords = words.slice(i, i + chunkSize);
+    const firstSeg = segments.find(s => s.wordIndex === i);
+    const nextSeg  = i + chunkSize < words.length ? segments.find(s => s.wordIndex === i + chunkSize) : null;
+
+    // Si les segments manquent, on répartit le temps équitablement
+    const startMs = i === 0 ? 0 : (firstSeg ? firstSeg.startMs : (i / words.length) * totalMs);
+    const endMs   = nextSeg ? nextSeg.startMs : totalMs;
+    const duration = Math.max(0.1, (endMs - startMs) / 1000);
+
+    chunks.push({ text: chunkWords.join(' '), startMs, endMs, duration });
+  }
+  return chunks;
+}
+
+// Crée un clip vidéo mot-par-mot pour un verset (fond couleur/gradient)
+async function generateWordByWordClip(settings, verseText, translationText, sourceText, dimensions, audioDuration, segments, tmpDir, verseId) {
+  const chunks = buildWordChunks(verseText, segments, audioDuration);
+  const chunkClipPaths = [];
+
+  for (let ci = 0; ci < chunks.length; ci++) {
+    const chunk = chunks[ci];
+    const frameBuffer = generateFrame(settings, chunk.text, sourceText, dimensions, translationText);
+    const framePath = path.join(tmpDir, `frame_${verseId}_c${ci}.png`);
+    fs.writeFileSync(framePath, frameBuffer);
+
+    const chunkClipPath = path.join(tmpDir, `clip_${verseId}_c${ci}.mp4`);
+    await new Promise((resolve, reject) => {
+      ffmpeg()
+        .input(framePath)
+        .inputOptions(['-loop', '1', '-t', String(chunk.duration)])
+        .videoCodec('libx264')
+        .outputOptions(['-pix_fmt', 'yuv420p', '-vf', `scale=${dimensions.width}:${dimensions.height}`, '-r', '30'])
+        .output(chunkClipPath)
+        .on('end', resolve)
+        .on('error', reject)
+        .run();
+    });
+    chunkClipPaths.push(chunkClipPath);
+  }
+
+  // Concaténer tous les chunks en un seul clip de verset
+  const verseClipPath = path.join(tmpDir, `verseclip_${verseId}.mp4`);
+  if (chunkClipPaths.length === 1) {
+    fs.copyFileSync(chunkClipPaths[0], verseClipPath);
+  } else {
+    const listPath = path.join(tmpDir, `chunks_${verseId}.txt`);
+    fs.writeFileSync(listPath, chunkClipPaths.map(p => `file '${p}'`).join('\n'));
+    await new Promise((resolve, reject) => {
+      ffmpeg()
+        .input(listPath)
+        .inputOptions(['-f', 'concat', '-safe', '0'])
+        .videoCodec('copy')
+        .output(verseClipPath)
+        .on('end', resolve)
+        .on('error', reject)
+        .run();
+    });
+  }
+  return verseClipPath;
 }
 
 // Durée d'un fichier audio
@@ -212,23 +281,33 @@ async function generateVideo(settings, surahName, verses, tmpDir) {
     await concatAudio(audioPaths, combinedAudioPath);
   }
 
-  // 3. Générer les frames pour chaque verset
+  // 3. Générer les frames / clips pour chaque verset
   console.log('🖼 Génération des frames...');
   const framePaths = [];
 
   for (let i = 0; i < verses.length; i++) {
     const verseId = verses[i];
     const verseText = settings.verseTexts[i];
+    const translationText = (settings.translationTexts && settings.translationTexts[i]) || '';
     const sourceText = `${surahName}\nVerset ${verseId}`;
     const duration = await getAudioDuration(audioPaths[i]);
+    const segments = (settings.verseSegments && settings.verseSegments[i]) || [];
 
-    console.log(`  → Verset ${verseId}: durée ${duration.toFixed(2)}s`);
+    console.log(`  → Verset ${verseId}: durée ${duration.toFixed(2)}s, ${segments.length} segments`);
 
-    const frameBuffer = generateFrame(settings, verseText, sourceText, dimensions);
-    const framePath = path.join(tmpDir, `frame_${verseId}.png`);
-    fs.writeFileSync(framePath, frameBuffer);
-
-    framePaths.push({ framePath, duration, verseId });
+    // Mot-par-mot si segments disponibles et fond non-vidéo (simplification)
+    if (segments.length > 0 && settings.bgType !== 'video') {
+      console.log(`  → Mode mot-par-mot (${Math.ceil(verseText.split(' ').length / 5)} chunks)`);
+      const verseClipPath = await generateWordByWordClip(
+        settings, verseText, translationText, sourceText, dimensions, duration, segments, tmpDir, verseId
+      );
+      framePaths.push({ framePath: null, verseClipPath, duration, verseId });
+    } else {
+      const frameBuffer = generateFrame(settings, verseText, sourceText, dimensions, translationText);
+      const framePath = path.join(tmpDir, `frame_${verseId}.png`);
+      fs.writeFileSync(framePath, frameBuffer);
+      framePaths.push({ framePath, verseClipPath: null, duration, verseId });
+    }
   }
 
   // 3.5 Télécharger la vidéo de fond si nécessaire
@@ -241,10 +320,18 @@ async function generateVideo(settings, surahName, verses, tmpDir) {
   // 4. Créer un clip vidéo par verset
   console.log('🎬 Création des clips vidéo...');
   const clipPaths = [];
-  let bgVideoOffset = 0; // Pour enchaîner les segments de la vidéo de fond
+  let bgVideoOffset = 0;
 
-  for (const { framePath, duration, verseId } of framePaths) {
+  for (const { framePath, verseClipPath, duration, verseId } of framePaths) {
     const clipPath = path.join(tmpDir, `clip_${verseId}.mp4`);
+
+    // Si le clip mot-par-mot est déjà généré, l'utiliser directement
+    if (verseClipPath) {
+      fs.copyFileSync(verseClipPath, clipPath);
+      console.log(`  ✓ Clip verset ${verseId} (mot-par-mot)`);
+      clipPaths.push(clipPath);
+      continue;
+    }
 
     if (bgVideoPath) {
       // Fond vidéo : overlay du texte sur la vidéo Pexels
@@ -260,33 +347,24 @@ async function generateVideo(settings, surahName, verses, tmpDir) {
             `[1:v]scale=${dimensions.width}:${dimensions.height},format=rgba[text]`,
             `[darkbg][text]overlay=0:0[outv]`,
           ])
-          .outputOptions([
-            '-map', '[outv]',
-            '-pix_fmt', 'yuv420p',
-            '-r', '30',
-            '-t', String(duration),
-          ])
+          .outputOptions(['-map', '[outv]', '-pix_fmt', 'yuv420p', '-r', '30', '-t', String(duration)])
           .videoCodec('libx264')
           .output(clipPath)
-          .on('end', () => { console.log(`  ✓ Clip verset ${verseId} créé (fond vidéo)`); resolve(); })
+          .on('end', () => { console.log(`  ✓ Clip verset ${verseId} (fond vidéo)`); resolve(); })
           .on('error', reject)
           .run();
       });
       bgVideoOffset += duration;
     } else {
-      // Fond image/couleur classique
+      // Fond couleur/gradient classique
       await new Promise((resolve, reject) => {
         ffmpeg()
           .input(framePath)
           .inputOptions(['-loop', '1', '-t', String(duration)])
           .videoCodec('libx264')
-          .outputOptions([
-            '-pix_fmt', 'yuv420p',
-            '-vf', `scale=${dimensions.width}:${dimensions.height}`,
-            '-r', '30',
-          ])
+          .outputOptions(['-pix_fmt', 'yuv420p', '-vf', `scale=${dimensions.width}:${dimensions.height}`, '-r', '30'])
           .output(clipPath)
-          .on('end', () => { console.log(`  ✓ Clip verset ${verseId} créé`); resolve(); })
+          .on('end', () => { console.log(`  ✓ Clip verset ${verseId}`); resolve(); })
           .on('error', reject)
           .run();
       });
