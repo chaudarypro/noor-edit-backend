@@ -100,6 +100,7 @@ async function generateFrame(settings, verseText, sourceText, dimensions, logoIm
     grad.addColorStop(0, settings.gradientFrom || '#001710');
     grad.addColorStop(1, settings.gradientTo || '#053025');
     ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, width, height);
   } else {
     ctx.fillStyle = settings.bgColor || '#001710';
     ctx.fillRect(0, 0, width, height);
