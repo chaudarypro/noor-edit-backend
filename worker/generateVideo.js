@@ -107,7 +107,7 @@ function generateFrame(settings, verseText, sourceText, dimensions) {
 
   // ── Texte arabe ──────────────────────────────────────────────────────────────
   if (settings.arabic?.show && verseText) {
-    const fontSize = (settings.arabic.size || 22) * (width / 400);
+    const fontSize = (settings.arabic.size || 8) / 100 * width;
     ctx.font = `${fontSize}px UthmanicHafs, serif`;
     ctx.fillStyle = settings.arabic.color || '#ffffff';
     ctx.textAlign = 'center';
@@ -126,13 +126,13 @@ function generateFrame(settings, verseText, sourceText, dimensions) {
 
     // ── Traduction ─────────────────────────────────────────────────────────────
     if (settings.translation?.show && settings.translationTexts) {
-      const transFontSize = (settings.translation.size || 10) * (width / 400);
+      const transFontSize = (settings.translation.size || 3) / 100 * width;
       ctx.font = `${transFontSize}px sans-serif`;
       ctx.fillStyle = settings.translation.color || '#ffffff';
       ctx.textAlign = 'center';
       ctx.direction = 'ltr';
       ctx.globalAlpha = 0.85;
-      const transY = startY + (settings.textGap || 16) * (width / 400);
+      const transY = startY - fontSize + (settings.textGap || 2) / 100 * width;
       ctx.fillText(settings.translationTexts[0] || '', width / 2, transY);
       ctx.globalAlpha = 1;
       startY = transY + transFontSize * 1.6;
@@ -140,7 +140,7 @@ function generateFrame(settings, verseText, sourceText, dimensions) {
 
     // ── Source du verset ───────────────────────────────────────────────────────
     if (settings.showSource && sourceText) {
-      const sourceFontSize = (settings.sourceSize || 5) * (width / 400) * 3;
+      const sourceFontSize = (settings.sourceSize || 2) / 100 * width;
       ctx.font = `${sourceFontSize}px sans-serif`;
       ctx.fillStyle = '#89938d';
       ctx.textAlign = 'center';
