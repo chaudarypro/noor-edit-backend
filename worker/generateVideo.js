@@ -158,22 +158,51 @@ async function generateFrame(settings, verseText, sourceText, dimensions, logoIm
     }
   }
 
-  // ── Watermark logo ────────────────────────────────────────────────────────────
-  if (logoImage) {
-    const logoSize = Math.round(width * 0.15);
+  // ── Watermark ─────────────────────────────────────────────────────────────────
+  const wmType = settings.watermarkType || 'default';
+  const isTop = settings.format === '16:9';
+
+  if (wmType === 'text' && settings.watermarkText) {
+    const fontSize = Math.round(width * 0.018);
+    ctx.font = `700 ${fontSize}px sans-serif`;
+    ctx.fillStyle = '#ffffff';
     ctx.globalAlpha = 0.25;
-    if (settings.format === '16:9') {
-      // Haut gauche avec marge
+    if (isTop) {
       const marginX = Math.round(width * 0.07);
       const marginY = Math.round(height * 0.08);
-      ctx.drawImage(logoImage, marginX, marginY, logoSize, logoSize);
+      ctx.textAlign = 'left';
+      ctx.fillText(settings.watermarkText.toUpperCase(), marginX, marginY + fontSize);
     } else {
-      // Centré en bas à 16% du bas
-      const x = (width - logoSize) / 2;
-      const y = height - height * 0.16 - logoSize;
-      ctx.drawImage(logoImage, x, y, logoSize, logoSize);
+      const y = height - height * 0.16;
+      ctx.textAlign = 'center';
+      ctx.fillText(settings.watermarkText.toUpperCase(), width / 2, y);
     }
     ctx.globalAlpha = 1;
+  } else {
+    // Logo (custom base64 ou logo Quran Edit par défaut)
+    let wmImage = logoImage;
+    if (wmType === 'logo' && settings.watermarkLogoBase64) {
+      try {
+        const buf = Buffer.from(settings.watermarkLogoBase64, 'base64');
+        wmImage = await loadImage(buf);
+      } catch (e) {
+        console.log('⚠️ Logo custom invalide, fallback logo par défaut');
+      }
+    }
+    if (wmImage) {
+      const logoSize = Math.round(width * 0.15);
+      ctx.globalAlpha = 0.25;
+      if (isTop) {
+        const marginX = Math.round(width * 0.07);
+        const marginY = Math.round(height * 0.08);
+        ctx.drawImage(wmImage, marginX, marginY, logoSize, logoSize);
+      } else {
+        const x = (width - logoSize) / 2;
+        const y = height - height * 0.16 - logoSize;
+        ctx.drawImage(wmImage, x, y, logoSize, logoSize);
+      }
+      ctx.globalAlpha = 1;
+    }
   }
 
   return canvas.toBuffer('image/png');
