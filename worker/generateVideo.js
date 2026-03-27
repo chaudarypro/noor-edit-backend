@@ -163,9 +163,10 @@ async function generateFrame(settings, verseText, sourceText, dimensions, logoIm
     const logoSize = Math.round(width * 0.15);
     ctx.globalAlpha = 0.25;
     if (settings.format === '16:9') {
-      // Haut gauche
-      const margin = Math.round(width * 0.025);
-      ctx.drawImage(logoImage, margin, margin, logoSize, logoSize);
+      // Haut gauche avec marge
+      const marginX = Math.round(width * 0.04);
+      const marginY = Math.round(height * 0.08);
+      ctx.drawImage(logoImage, marginX, marginY, logoSize, logoSize);
     } else {
       // Centré en bas à 16% du bas
       const x = (width - logoSize) / 2;
