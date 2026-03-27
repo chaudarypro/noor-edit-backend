@@ -6,7 +6,7 @@ const fetch = require('node-fetch');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
-const { createCanvas, registerFont } = require('canvas');
+const { createCanvas, registerFont, loadImage } = require('canvas');
 
 ffmpeg.setFfmpegPath(ffmpegPath);
 ffmpeg.setFfprobePath(ffprobePath);
@@ -81,7 +81,7 @@ function wrapText(ctx, text, maxWidth) {
 }
 
 // Génère une frame PNG pour un verset
-function generateFrame(settings, verseText, sourceText, dimensions) {
+async function generateFrame(settings, verseText, sourceText, dimensions, logoImage) {
   const { width, height } = dimensions;
   const canvas = createCanvas(width, height);
   const ctx = canvas.getContext('2d');
@@ -158,14 +158,22 @@ function generateFrame(settings, verseText, sourceText, dimensions) {
     }
   }
 
-  // ── Watermark ────────────────────────────────────────────────────────────────
-  ctx.font = `${width * 0.018}px sans-serif`;
-  ctx.fillStyle = 'rgba(193, 236, 219, 0.25)';
-  ctx.textAlign = 'left';
-  ctx.direction = 'ltr';
-  ctx.globalAlpha = 0.25;
-  ctx.fillText('✦ NOOR EDIT', 30, height - 30);
-  ctx.globalAlpha = 1;
+  // ── Watermark logo ────────────────────────────────────────────────────────────
+  if (logoImage) {
+    const logoSize = Math.round(width * 0.15);
+    ctx.globalAlpha = 0.25;
+    if (settings.format === '16:9') {
+      // Haut gauche
+      const margin = Math.round(width * 0.025);
+      ctx.drawImage(logoImage, margin, margin, logoSize, logoSize);
+    } else {
+      // Centré en bas à 16% du bas
+      const x = (width - logoSize) / 2;
+      const y = height - height * 0.16 - logoSize;
+      ctx.drawImage(logoImage, x, y, logoSize, logoSize);
+    }
+    ctx.globalAlpha = 1;
+  }
 
   return canvas.toBuffer('image/png');
 }
@@ -193,6 +201,15 @@ async function downloadBgVideo(url, destPath) {
 // Génère la vidéo complète
 async function generateVideo(settings, surahName, verses, tmpDir) {
   const dimensions = getDimensions(settings.format);
+
+  // Charger le logo une seule fois
+  let logoImage = null;
+  try {
+    logoImage = await loadImage(path.join(__dirname, '..', 'splashscreen.png'));
+    console.log('✅ Logo watermark chargé');
+  } catch (e) {
+    console.log('⚠️ Logo watermark non trouvé, watermark désactivé');
+  }
 
   // 1. Télécharger tous les audios
   console.log('📥 Téléchargement des audios...');
@@ -224,7 +241,7 @@ async function generateVideo(settings, surahName, verses, tmpDir) {
 
     console.log(`  → Verset ${verseId}: durée ${duration.toFixed(2)}s`);
 
-    const frameBuffer = generateFrame(settings, verseText, sourceText, dimensions);
+    const frameBuffer = await generateFrame(settings, verseText, sourceText, dimensions, logoImage);
     const framePath = path.join(tmpDir, `frame_${verseId}.png`);
     fs.writeFileSync(framePath, frameBuffer);
 
