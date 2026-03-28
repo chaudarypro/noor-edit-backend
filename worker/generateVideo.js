@@ -132,15 +132,25 @@ async function generateFrame(settings, verseText, sourceText, dimensions, logoIm
     // ── Traduction ─────────────────────────────────────────────────────────────
     if (settings.translation?.show && settings.translationTexts) {
       const transFontSize = (settings.translation.size || 3) / 100 * width;
-      ctx.font = `${transFontSize}px sans-serif`;
+      const transWeight = settings.translation.fontStyle === 'bold' ? '700' : settings.translation.fontStyle === 'light' ? '300' : '400';
+      ctx.font = `${transWeight} ${transFontSize}px sans-serif`;
       ctx.fillStyle = settings.translation.color || '#ffffff';
-      ctx.textAlign = 'center';
+      ctx.textAlign = settings.translation.align || 'center';
       ctx.direction = 'ltr';
       ctx.globalAlpha = 0.85;
-      const transY = startY - fontSize + (settings.textGap || 2) / 100 * width;
-      ctx.fillText(settings.translationTexts[0] || '', width / 2, transY);
+
+      const transMaxWidth = width - 160;
+      const transLines = wrapText(ctx, settings.translationTexts[0] || '', transMaxWidth);
+      const transLineHeight = transFontSize * 1.6;
+      let transY = startY + (settings.textGap || 2) / 100 * width;
+
+      for (const line of transLines) {
+        ctx.fillText(line, width / 2, transY);
+        transY += transLineHeight;
+      }
+
       ctx.globalAlpha = 1;
-      startY = transY + transFontSize * 1.6;
+      startY = transY;
     }
 
     // ── Source du verset ───────────────────────────────────────────────────────
